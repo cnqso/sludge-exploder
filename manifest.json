@@ -1,0 +1,24 @@
+{
+    "manifest_version": 3,
+    "name": "Sludge Exploder",
+    "version": "1.0",
+    "description": "Brute, barbaric, unsophisticated website blocker.",
+    "icons": {
+        "16": "icon16.png",
+        "48": "icon48.png",
+        "128": "icon128.png"
+    },
+    "content_scripts": [
+      {
+        "matches": ["<all_urls>"],
+        "js": ["zapper.js"],
+        "run_at": "document_start"
+      }
+    ],
+    "web_accessible_resources": [
+      {
+        "resources": ["config.json"],
+        "matches": ["<all_urls>"]
+      }
+    ]
+  }

@@ -1,0 +1,82 @@
+[
+  {
+    "domain": "youtube.com",
+    "selectors": [
+      "ytd-rich-grid-renderer",
+      "div[class='ytd-reel-video-renderer']",
+      "ytd-reel-video-renderer",
+      "#shorts-container",
+      "yt-lockup-view-model",
+      "ytd-watch-next-secondary-results-renderer",
+      "ytd-browse"
+    ],
+    "allowWindow": null
+  },
+  {
+    "domain": "reddit.com",
+    "selectors": [
+      "shreddit-feed",
+      "#feed-category-bar",
+      "shreddit-gallery-carousel",
+      "aside",
+      "#left-sidebar"
+    ],
+    "allowWindow": null
+  },
+  {
+    "domain": "substack.com",
+    "permablock_selectors": [
+      "div[aria-label=\"Notes feed\"]"
+    ],
+    "selectors": [
+      "body"
+    ],
+    "allowWindow": {
+      "start": 12,
+      "end": 23
+    }
+  },
+  {
+    "domain": "x.com",
+    "selectors": [
+      "body"
+    ],
+    "allowWindow": null
+  },
+  {
+    "domain": "facebook.com",
+    "selectors": [
+      "body"
+    ],
+    "allowWindow": null
+  },
+  {
+    "domain": "instagram.com",
+    "selectors": [
+      "body"
+    ],
+    "allowWindow": null
+  },
+  {
+    "domain": "news.ycombinator.com",
+    "selectors": [
+      "tr[class='athing submission']",
+      "td[class='subtext']"
+    ],
+    "allowWindow": {
+      "start": 12,
+      "end": 23
+    }
+  },
+  {
+    "domain": "wsj.com",
+    "selectors": [
+      "body"
+    ],
+    "allowWindow": {
+      "start": 12,
+      "end": 23
+    }
+  }
+]
+
