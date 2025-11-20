@@ -63,10 +63,13 @@
       "tr[class='athing submission']",
       "td[class='subtext']"
     ],
-    "allowWindow": {
-      "start": 13,
-      "end": 23
-    }
+    "allowWindow": null
+  },
+  { "domain": "tiktok.com",
+    "selectors": [
+      "body"
+    ],
+    "allowWindow": null
   },
   {
     "domain": "wsj.com",
@@ -77,6 +80,19 @@
         "start": 15,
         "end": 23
       }
+  },
+  {
+    "domain": "nytimes.com",
+    "selectors": [
+      "body"
+    ],
+    "allowWindow": null
+  },
+  { "domain": "bluesky.app",
+    "selectors": [
+      "body"
+    ],
+    "allowWindow": null
   }
 ]
 
