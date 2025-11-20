@@ -8,6 +8,12 @@
         "48": "icon48.png",
         "128": "icon128.png"
     },
+    "browser_specific_settings": {
+        "gecko": {
+            "id": "sludge-exploder@williamkelly",
+            "strict_min_version": "115.0"
+        }
+    },
     "content_scripts": [
       {
         "matches": ["<all_urls>"],

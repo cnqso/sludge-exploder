@@ -32,7 +32,7 @@
       "body"
     ],
     "allowWindow": {
-      "start": 12,
+      "start": 15,
       "end": 23
     }
   },
@@ -64,7 +64,7 @@
       "td[class='subtext']"
     ],
     "allowWindow": {
-      "start": 12,
+      "start": 13,
       "end": 23
     }
   },
@@ -74,9 +74,9 @@
       "body"
     ],
     "allowWindow": {
-      "start": 12,
-      "end": 23
-    }
+        "start": 15,
+        "end": 23
+      }
   }
 ]
 

@@ -1,20 +1,39 @@
 (async function () {
+    const runtimeAPI = (typeof browser !== 'undefined' && browser.runtime)
+        ? browser.runtime
+        : (typeof chrome !== 'undefined' ? chrome.runtime : null);
+
+    if (!runtimeAPI) {
+        console.error('SLUDGE EXPLODER: Runtime API not found.');
+        return;
+    }
+
+    const matchesDomain = (host, domain) => {
+        if (!host || !domain) return false;
+        const normalizedHost = host.toLowerCase();
+        const normalizedDomain = domain.toLowerCase();
+        return (
+            normalizedHost === normalizedDomain ||
+            normalizedHost.endsWith(`.${normalizedDomain}`)
+        );
+    };
+
     let CONFIG;
     try {
-        const configUrl = chrome.runtime.getURL('config.json');
+        const configUrl = runtimeAPI.getURL('config.json');
         const response = await fetch(configUrl);
         CONFIG = await response.json();
     } catch (error) {
-        console.error('SLUDE EXPLODER: Failed to load config.json', error);
+        console.error('SLUDGE EXPLODER: Failed to load config.json', error);
         return;
     }
 
 
-    const currentHost = window.location.hostname;
+    const currentHost = window.location.hostname.toLowerCase();
     const now = new Date();
     const currentHour = now.getHours();
 
-    const siteConfig = CONFIG.find(entry => currentHost.includes(entry.domain));
+    const siteConfig = CONFIG.find(entry => matchesDomain(currentHost, entry.domain));
 
     if (!siteConfig) return;
 
@@ -49,6 +68,6 @@
         document.documentElement.appendChild(style);
     }
 
-    console.log(`SLUDE EXPLODER: Blocked content on ${siteConfig.domain}`);
+    console.log(`SLUDGE EXPLODER: Blocked content on ${siteConfig.domain}`);
 
 })();

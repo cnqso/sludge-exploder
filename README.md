@@ -17,11 +17,21 @@ Because it's important that the extension is dictated by ugly, temperamental JSO
 ## Setup
 1. Download the directory wherever you desire (I'd advise against Desktop or Downloads)
 2. Modify the "config.json" if you'd like (Comes preloaded with an *omakase* feed block schedule that you're free to try)
-3. Go to [chrome://extensions/](chrome://extensions/)
-4. Enable "developer mode" in the top-right, then hit "Load unpacked" in the top left
-5. Choose the "Sludge Exploder" folder you just downloaded
-6. Never, ever hit the "disable button"
-7. (Optional) Hit "Details" and enable "Allow in Incognito"
+3. Choose the instructions that match your browser:
 
-If you ever modify the config.json, make sure to reload the extension with the little refresh button next to the disable button. 
+### Chrome / Edge (Chromium)
+1. Go to [chrome://extensions/](chrome://extensions/)
+2. Enable "developer mode" in the top-right, then hit "Load unpacked" in the top left
+3. Choose the "Sludge Exploder" folder you just downloaded
+4. Never, ever hit the "disable button"
+5. (Optional) Hit "Details" and enable "Allow in Incognito"
+
+### Firefox
+1. Go to `about:debugging#/runtime/this-firefox`
+2. Click "Load Temporary Add-on..."
+3. Select any file inside the "Sludge Exploder" folder (Firefox will ingest the whole directory)
+4. Firefox will unload temporary add-ons on restart; when you're ready to publish permanently, package the folder and load it via "about:addons" or sign it through Mozilla's Add-on Developer Hub.
+5. Same rules apply: avoid the disable button.
+
+If you ever modify the config.json, make sure to reload the extension (Chrome: hit the refresh icon next to the disable toggle; Firefox: click "Reload" in `about:debugging`). 
 
