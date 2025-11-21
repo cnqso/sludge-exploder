@@ -93,6 +93,25 @@
       "body"
     ],
     "allowWindow": null
+  },
+  {
+    "domain": "4chan.org",
+    "selectors": [
+      "body"
+    ],
+    "allowWindow": null,
+    "paths": [
+      {
+        "path": "/lit/",
+        "selectors": [
+          "body"
+        ],
+        "allowWindow": {
+          "start": 15,
+          "end": 23
+        }
+      }
+    ]
   }
 ]
 
