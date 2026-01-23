@@ -1,7 +1,7 @@
 [
   {
     "domain": "youtube.com",
-    "selectors": [
+    "permablock_selectors": [
       "ytd-rich-grid-renderer",
       "div[class='ytd-reel-video-renderer']",
       "ytd-reel-video-renderer",
@@ -9,6 +9,15 @@
       "yt-lockup-view-model",
       "ytd-watch-next-secondary-results-renderer",
       "ytd-browse"
+    ], 
+    "selectors": [
+    ],
+    "allowWindow": null
+  },
+  {
+    "domain": "old.reddit.com",
+    "selectors": [
+      "body"
     ],
     "allowWindow": null
   },
@@ -29,7 +38,7 @@
       "div[aria-label=\"Notes feed\"]"
     ],
     "selectors": [
-      "body"
+
     ],
     "allowWindow": {
       "start": 15,
@@ -48,7 +57,14 @@
     "selectors": [
       "body"
     ],
-    "allowWindow": null
+    "allowWindow": null,
+    "paths": [
+      {
+        "path": "/marketplace",
+        "selectors": [],
+        "allowWindow": null
+      }
+    ]
   },
   {
     "domain": "instagram.com",
@@ -88,7 +104,25 @@
     ],
     "allowWindow": null
   },
+  {"domain": "washingtonpost.com",
+    "selectors": [
+      "body"
+    ],
+    "allowWindow": null
+  },
+  { "domain": "ft.com",
+    "selectors": [
+      "body"
+    ],
+    "allowWindow": null
+  },
   { "domain": "bluesky.app",
+    "selectors": [
+      "body"
+    ],
+    "allowWindow": null
+  },
+  { "domain": "archive.ph",
     "selectors": [
       "body"
     ],
