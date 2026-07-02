@@ -1,37 +1,47 @@
 # Sludge Exploder
 
-Brute, barbaric, unsophisticated algo blocker for Chrome.
+**The internet is good. Recommendation algorithms are bad.**
 
-Block sites, feeds, and individual elements. Options available for timed breaks.
+A brute, barbaric, unsophisticated feed blocker for Chrome and Firefox.
 
-Requires manual config for maximum friction. As long as you don't press the "disable" button you'll be good. And you wouldn't do that, right?
+The knowledge economy is worth protecting. Wikipedia, documentation, GitHub, direct search results, articles you chose to read — these are worth having. What isn't worth having is the feed: algorithmically-selected content engineered to maximize time-on-site rather than inform you of something. This extension hides feed elements while leaving intentional navigation intact.
 
-## Why
+Because I'm an addict. None of the available extensions were configurable enough.
 
-Because I'm an ADDICT! I needed a very configurable site block/modification routine, and none of the available extensions were ideal for me.
+## Config Reference
 
-## Why distribute through github instead of through the extensions store?
+`config.js` assigns an array of site rules to `globalThis.SLUDGE_CONFIG`. The included config is an opinionated starting point — modify it freely. The friction is the point.
 
-Because it's important that the extension is dictated by ugly, temperamental JSON so that you aren't constantly tempted to modify your carefully crafted configuration screen. Your only job is to NOT hit the "disable" button. How hard could that possibly be?
+```js
+globalThis.SLUDGE_CONFIG = [
+  {
+    "domain": "example.com",
+    "selectors": [".feed", ".recommendations"],
+    "permablock_selectors": [".always-hidden"],
+    "allowWindow": { "start": 15, "end": 23 },
+    "paths": [
+      {
+        "path": "/allowed-section/",
+        "selectors": [],
+        "allowWindow": null
+      }
+    ]
+  }
+];
+```
 
-## Setup
-1. Download the directory wherever you desire (I'd advise against Desktop or Downloads)
-2. Modify the "config.json" if you'd like (Comes preloaded with an *omakase* feed block schedule that you're free to try)
-3. Choose the instructions that match your browser:
+| Field | Description |
+|-------|-------------|
+| `domain` | Domain to match. Subdomain-aware and specificity-based: `reddit.com` also matches `old.reddit.com`, but an explicit `old.reddit.com` rule wins. |
+| `selectors` | CSS selectors to hide when outside the `allowWindow`. Use `["body"]` to block the whole page. |
+| `permablock_selectors` | CSS selectors hidden regardless of `allowWindow` — for content never worth seeing (e.g. Shorts, autoplay recommendations). |
+| `allowWindow` | `{ "start": H, "end": H }` in 24h local time. When the current hour is in range, `selectors` are suppressed. Overnight windows like `{ "start": 22, "end": 2 }` are supported. `null` means always block. |
+| `paths` | Path-specific rule overrides. The most specific matching path wins, then merges with the domain config; `permablock_selectors` from both levels are combined. Use path rules to allow specific sections of an otherwise-blocked site. |
 
-### Chrome / Edge (Chromium)
-1. Go to [chrome://extensions/](chrome://extensions/)
-2. Enable "developer mode" in the top-right, then hit "Load unpacked" in the top left
-3. Choose the "Sludge Exploder" folder you just downloaded
-4. Never, ever hit the "disable button"
-5. (Optional) Hit "Details" and enable "Allow in Incognito"
+**Path matching:** exact match, or prefix match at a proper segment boundary. Patterns ending in `/` match the slashless path and all subpaths (e.g. `/jobs/` matches `/jobs` and `/jobs/software-engineer-123`). Patterns not ending in `/` won't partially match segments (e.g. `/lit` won't match `/literature`).
 
-### Firefox
-1. Go to `about:debugging#/runtime/this-firefox`
-2. Click "Load Temporary Add-on..."
-3. Select any file inside the "Sludge Exploder" folder (Firefox will ingest the whole directory)
-4. Firefox will unload temporary add-ons on restart; when you're ready to publish permanently, package the folder and load it via "about:addons" or sign it through Mozilla's Add-on Developer Hub.
-5. Same rules apply: avoid the disable button.
+Validate config before reloading:
 
-If you ever modify the config.json, make sure to reload the extension (Chrome: hit the refresh icon next to the disable toggle; Firefox: click "Reload" in `about:debugging`). 
-
+```sh
+node validate-config.js
+```

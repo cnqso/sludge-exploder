@@ -1,16 +1,16 @@
-[
+globalThis.SLUDGE_CONFIG = [
   {
     "domain": "youtube.com",
     "permablock_selectors": [
-      "ytd-rich-grid-renderer",
       "div[class='ytd-reel-video-renderer']",
       "ytd-reel-video-renderer",
-      "#shorts-container",
+      "#shorts-container"
+    ],
+    "selectors": [
+      "ytd-rich-grid-renderer",
       "yt-lockup-view-model",
       "ytd-watch-next-secondary-results-renderer",
       "ytd-browse"
-    ], 
-    "selectors": [
     ],
     "allowWindow": null
   },
@@ -46,13 +46,6 @@
     }
   },
   {
-    "domain": "x.com",
-    "selectors": [
-      "body"
-    ],
-    "allowWindow": null
-  },
-  {
     "domain": "facebook.com",
     "selectors": [
       "body"
@@ -68,18 +61,15 @@
   },
   {
     "domain": "instagram.com",
-    "selectors": [
-      "body"
-    ],
-    "allowWindow": null
-  },
-  {
-    "domain": "news.ycombinator.com",
-    "selectors": [
-      "tr[class='athing submission']",
-      "td[class='subtext']"
-    ],
-    "allowWindow": null
+    "selectors": [],
+    "allowWindow": null,
+    "paths": [
+      { "path": "/",        "selectors": ["body"], "allowWindow": null },
+      { "path": "/explore", "selectors": ["body"], "allowWindow": null },
+      { "path": "/reels",   "selectors": ["body"], "allowWindow": null },
+      { "path": "/direct",  "selectors": ["body"], "allowWindow": null },
+      { "path": "/stories", "selectors": ["body"], "allowWindow": null }
+    ]
   },
   { "domain": "tiktok.com",
     "selectors": [
@@ -94,7 +84,7 @@
     ],
     "allowWindow": {
         "start": 15,
-        "end": 23
+        "end": 24
       }
   },
   {
@@ -122,7 +112,15 @@
     ],
     "allowWindow": null
   },
-  { "domain": "archive.ph",
+  {
+    "domain": "x.com",
+    "selectors": [
+      "body"
+    ],
+    "allowWindow": null
+  },
+  {
+    "domain": "twitter.com",
     "selectors": [
       "body"
     ],
@@ -147,5 +145,4 @@
       }
     ]
   }
-]
-
+];
