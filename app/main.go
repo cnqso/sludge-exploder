@@ -1,7 +1,8 @@
 // Command app is the Sludge Exploder preference UI: a Go process hosting a
-// system webview, plus a local socket server that the Native Messaging
-// relay (app/nmhost) connects to so it can push config into the extension.
-// See the Stage 2 plan in docs/DEVELOPMENT_PLAN.md.
+// system webview. As of Stage 3, the app itself holds no bridge/lock state
+// -- it's a thin client of the daemon (see daemonclient.go), which is what
+// the extension's Native Messaging heartbeat actually connects to via
+// app/nmhost. See docs/DEVELOPMENT_PLAN.md Stage 3.
 package main
 
 import (
@@ -28,13 +29,7 @@ func main() {
 		prefs = defaultPrefs()
 	}
 
-	socket := NewSocketServer()
-	if err := socket.Start(); err != nil {
-		log.Fatalf("sludge-exploder: starting local socket server: %v", err)
-	}
-	defer socket.Stop()
-
-	app := &App{prefs: prefs, socket: socket}
+	app := &App{prefs: prefs}
 	app.AutoRegisterHosts()
 
 	w := webview.New(false)
@@ -53,7 +48,10 @@ func main() {
 	bind("getDetectedBrowsers", app.GetDetectedBrowsers)
 	bind("getConnectionStatus", app.GetConnectionStatus)
 	bind("registerBrowserHost", app.RegisterBrowserHost)
+	bind("getLockStatus", app.GetLockStatus)
 	bind("confirmLock", app.ConfirmLock)
+	bind("attemptUnlock", app.AttemptUnlock)
+	bind("setEnforcement", app.SetEnforcement)
 
 	html := strings.Replace(uiHTML, "/*STYLE*/", uiCSS, 1)
 	html = strings.Replace(html, "/*SCRIPT*/", uiJS, 1)

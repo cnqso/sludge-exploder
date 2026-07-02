@@ -1,20 +1,26 @@
 // Service worker. Stage 1 gave it a console for manual testing (still
-// available below via sludgeGetStatus()). Stage 2 adds the native-messaging
-// client that talks to the app's config bridge (docs/ENFORCEMENT.md §5.1):
-//   - sends {type:'hello'} on connect
-//   - applies inbound {type:'setConfig'} to chrome.storage.local
-//   - answers {type:'getStatus'} and proactively pushes {type:'status'} on
-//     any storage change, so the app's status panel updates live
-// Native Messaging spawns app/nmhost/main.go, a dumb relay to the app's
-// local socket -- see the Stage 2 plan for why it's a relay, not a direct
-// link between this script and the app process.
+// available below via sludgeGetStatus()). Stage 2 added a native-messaging
+// client that talked to the app. Stage 3 points that same channel at the
+// daemon instead (docs/ENFORCEMENT.md §5.1) and turns the one-off "hello"
+// into a real heartbeat:
+//   - sends {type:'heartbeat', extId, version, configHash} every 5s while
+//     the port is open
+//   - applies {configToApply} from every heartbeat reply to
+//     chrome.storage.local -- the daemon always includes this (see
+//     daemon/configstore.go for why it's unconditional, not hash-gated)
+//   - still applies an inbound {type:'setConfig'} immediately too, for the
+//     Stage 2 live-reload feel when the app pushes a change proactively
+// Native Messaging spawns app/nmhost/main.go, a dumb relay to the daemon's
+// local socket.
 importScripts('config.js', 'hash.js');
 
 const NATIVE_HOST = 'com.sludgeexploder.host'; // must match shared.NativeHostName
 const STORAGE_KEY = 'SLUDGE_CONFIG';
 const BUNDLED_CONFIG = globalThis.SLUDGE_CONFIG;
+const HEARTBEAT_INTERVAL_MS = 5000;
 
 let port = null;
+let heartbeatTimer = null;
 let reconnectDelayMs = 1000;
 const MAX_RECONNECT_DELAY_MS = 8000;
 
@@ -24,37 +30,44 @@ async function getActiveConfig() {
     return Array.isArray(storedConfig) && storedConfig.length > 0 ? storedConfig : BUNDLED_CONFIG;
 }
 
-async function computeStatus() {
-    const config = await getActiveConfig();
-    return {
-        type: 'status',
-        extId: chrome.runtime.id,
-        version: chrome.runtime.getManifest().version,
-        configHash: sludgeHashConfig(config),
-        rulesActive: config.length,
-    };
+async function applyConfig(rules) {
+    if (!Array.isArray(rules)) return;
+    await chrome.storage.local.set({ [STORAGE_KEY]: rules });
 }
 
-async function handleAppMessage(message) {
+function handleDaemonMessage(message) {
     if (!message || typeof message.type !== 'string') return;
 
-    if (message.type === 'setConfig') {
-        const rules = Array.isArray(message.rules) ? message.rules : [];
-        await chrome.storage.local.set({ [STORAGE_KEY]: rules });
-        const status = await computeStatus();
-        port?.postMessage({ type: 'setConfigAck', configHash: status.configHash });
+    if (message.type === 'status') {
+        if (Array.isArray(message.configToApply)) {
+            applyConfig(message.configToApply);
+        }
         return;
     }
 
-    if (message.type === 'getStatus') {
-        port?.postMessage(await computeStatus());
+    if (message.type === 'setConfig') {
+        applyConfig(message.rules);
     }
+}
+
+function sendHeartbeat() {
+    if (!port) return;
+    getActiveConfig().then((config) => {
+        port?.postMessage({
+            type: 'heartbeat',
+            extId: chrome.runtime.id,
+            version: chrome.runtime.getManifest().version,
+            configHash: sludgeHashConfig(config),
+        });
+    });
 }
 
 function scheduleReconnect() {
     // Plain setTimeout in an MV3 service worker isn't guaranteed to survive
     // suspension past ~30s idle -- fine for this short backoff (caps at 8s),
-    // but Stage 3's formal heartbeat should move to chrome.alarms instead.
+    // and irrelevant once connected: an open native-messaging port is one
+    // of MV3's documented conditions for keeping the service worker alive,
+    // so the heartbeat interval below doesn't share this caveat.
     setTimeout(connectToApp, reconnectDelayMs);
     reconnectDelayMs = Math.min(reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS);
 }
@@ -69,32 +82,27 @@ function connectToApp() {
         return;
     }
 
-    port.onMessage.addListener((message) => { handleAppMessage(message); });
+    port.onMessage.addListener((message) => { handleDaemonMessage(message); });
     port.onDisconnect.addListener(() => {
-        // Expected until the user finishes setup (host not registered yet)
-        // or whenever the app isn't running -- reading chrome.runtime.lastError
-        // here is required, not optional: Chrome logs an "Unchecked
-        // runtime.lastError" warning to the console for every disconnect
-        // where nothing reads it, even totally expected ones like this.
+        // Expected until the daemon is registered/running -- reading
+        // chrome.runtime.lastError here is required, not optional: Chrome
+        // logs an "Unchecked runtime.lastError" warning to the console for
+        // every disconnect where nothing reads it, even expected ones.
         if (chrome.runtime.lastError) {
-            console.debug('SLUDGE EXPLODER: native host disconnected:', chrome.runtime.lastError.message);
+            console.debug('SLUDGE EXPLODER: daemon disconnected:', chrome.runtime.lastError.message);
         }
         port = null;
+        if (heartbeatTimer) {
+            clearInterval(heartbeatTimer);
+            heartbeatTimer = null;
+        }
         scheduleReconnect();
     });
 
     reconnectDelayMs = 1000;
-    port.postMessage({
-        type: 'hello',
-        extId: chrome.runtime.id,
-        version: chrome.runtime.getManifest().version,
-    });
+    sendHeartbeat();
+    heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
 }
-
-chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local' || !changes[STORAGE_KEY] || !port) return;
-    computeStatus().then((status) => port.postMessage(status));
-});
 
 connectToApp();
 

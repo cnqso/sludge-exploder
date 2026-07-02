@@ -28,35 +28,90 @@ const NativeHostName = "com.sludgeexploder.host"
 // docs/ENFORCEMENT.md §9.
 const ChromeExtensionID = "iaebhkbbkbjonipfifaidlcmdkgaijik"
 
-// Message is the envelope exchanged between background.js and the app, both
-// over Native Messaging (ext <-> nmhost) and the local socket (nmhost <->
-// app). Field names must stay in sync with the hand-written shapes in
-// extension/background.js.
+// Message is the envelope exchanged both on the heartbeat channel
+// (extension <-> nmhost <-> daemon) and the control channel (app <->
+// daemon). Not every field applies to every Type; see the comments below.
+// Field names on the heartbeat side must stay in sync with the hand-written
+// shapes in extension/background.js.
 type Message struct {
 	Type string `json:"type"`
 
-	// hello (ext -> app)
+	// hello, heartbeat (ext -> daemon)
 	ExtID   string `json:"extId,omitempty"`
 	Version string `json:"version,omitempty"`
 
-	// setConfig (app -> ext)
+	// setConfig (app -> daemon -> ext)
 	Rules []map[string]any `json:"rules,omitempty"`
 
-	// setConfigAck, status (ext -> app)
+	// setConfigAck, status, heartbeat (ext -> daemon)
 	ConfigHash  string `json:"configHash,omitempty"`
 	RulesActive int    `json:"rulesActive,omitempty"`
 
-	// _bridgeHello (nmhost -> app only; synthetic, never sent by the
+	// _bridgeHello (nmhost -> daemon only; synthetic, never sent by the
 	// extension). Identifies which browser spawned this nmhost process.
 	Browser string `json:"browser,omitempty"`
+
+	// Heartbeat replies (daemon -> ext) and control status responses
+	// (daemon -> app).
+	LockState     string                   `json:"lockState,omitempty"`
+	Until         string                   `json:"until,omitempty"` // RFC3339; empty if UNLOCKED
+	ConfigToApply []map[string]any         `json:"configToApply,omitempty"`
+	Enforcement   bool                     `json:"enforcement,omitempty"`
+	Browsers      []BrowserHeartbeatStatus `json:"browsers,omitempty"`
+	Risk          []BrowserRisk            `json:"risk,omitempty"`
+
+	// Control channel only (app -> daemon).
+	Token           string `json:"token,omitempty"`
+	DurationSeconds int    `json:"durationSeconds,omitempty"`
+	Enabled         bool   `json:"enabled,omitempty"`
+
+	// error (daemon -> app; e.g. StopLock refusal, bad token)
+	Error string `json:"error,omitempty"`
+}
+
+// BrowserHeartbeatStatus is one browser's live state as tracked by the
+// daemon's heartbeat server, returned in control-channel status responses.
+type BrowserHeartbeatStatus struct {
+	Browser     string `json:"browser"`
+	Connected   bool   `json:"connected"`
+	Alive       bool   `json:"alive"` // connected AND heartbeating within threshold
+	ExtID       string `json:"extId,omitempty"`
+	Version     string `json:"version,omitempty"`
+	ConfigHash  string `json:"configHash,omitempty"`
+	RulesActive int    `json:"rulesActive,omitempty"`
+}
+
+// BrowserRisk is one browser's "at risk" state: a lock is active, this
+// browser's extension has gone missing, and it's still within its startup
+// grace period (see daemon/enforce.go's sessionTracker) -- not yet closed,
+// but will be once the countdown reaches zero unless it reconnects.
+type BrowserRisk struct {
+	Browser               string `json:"browser"` // process name, e.g. "Google Chrome"
+	Label                 string `json:"label"`   // display name
+	GraceRemainingSeconds int    `json:"graceRemainingSeconds"`
 }
 
 // Message.Type values.
 const (
+	// Heartbeat channel (extension <-> daemon, via nmhost).
 	TypeHello        = "hello"
+	TypeHeartbeat    = "heartbeat"
 	TypeSetConfig    = "setConfig"
 	TypeSetConfigAck = "setConfigAck"
 	TypeGetStatus    = "getStatus"
 	TypeStatus       = "status"
 	TypeBridgeHello  = "_bridgeHello"
+
+	// Control channel (app <-> daemon).
+	TypeStartLock      = "startLock"
+	TypeStopLock       = "stopLock"
+	TypeSetEnforcement = "setEnforcement"
+	TypeLockStatus     = "lockStatus"
+	TypeError          = "error"
+)
+
+// Lock states, shared verbatim between daemon/lock.go and the JS/UI side.
+const (
+	LockStateUnlocked = "UNLOCKED"
+	LockStateLocked   = "LOCKED"
 )

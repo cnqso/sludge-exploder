@@ -15,6 +15,9 @@ async function init() {
 
     await refreshStatus();
     setInterval(refreshStatus, 1500);
+
+    await refreshLockStatus();
+    setInterval(refreshLockStatus, 1000);
 }
 
 function renderCatalog() {
@@ -109,6 +112,13 @@ function renderBrowsers() {
         label.textContent = b.label;
         row.appendChild(label);
 
+        if (b.connected) {
+            const heartbeat = document.createElement('span');
+            heartbeat.className = 'heartbeat-badge ' + (b.alive ? 'alive' : 'stale');
+            heartbeat.textContent = b.alive ? 'ALIVE' : 'MISSING';
+            row.appendChild(heartbeat);
+        }
+
         if (!b.hostRegistered) {
             // Auto-registered on app startup (fixed extension IDs, no user
             // input needed) -- a visible button here only means that failed,
@@ -148,17 +158,91 @@ document.getElementById('lock-button').addEventListener('click', () => {
     const blockedApps = Object.values(prefs.selections).filter(parts => Object.values(parts).some(Boolean)).length;
 
     document.getElementById('lock-confirm-text').textContent =
-        `Blocking ${blockedApps} app(s) for ${duration} minute(s). This is a preview -- nothing is enforced yet.`;
+        `Blocking ${blockedApps} app(s) for ${duration} minute(s). This starts a real, daemon-enforced lock.`;
     document.getElementById('lock-confirm-dialog').showModal();
 
     document.getElementById('lock-confirm-yes').onclick = async () => {
         document.getElementById('lock-confirm-dialog').close();
-        prefs.lastLockIntent = await confirmLock(duration);
+        try {
+            prefs.lastLockIntent = await confirmLock(duration);
+        } catch (err) {
+            alert(`Failed to start lock: ${err}`);
+        }
         renderLockSummary();
+        await refreshLockStatus();
     };
     document.getElementById('lock-confirm-no').onclick = () => {
         document.getElementById('lock-confirm-dialog').close();
     };
+});
+
+async function refreshLockStatus() {
+    const status = await getLockStatus();
+    renderLockStatus(status);
+}
+
+function renderLockStatus(status) {
+    const countdownEl = document.getElementById('lock-countdown');
+    if (status.state === 'LOCKED' && status.until) {
+        const remainingMs = new Date(status.until).getTime() - Date.now();
+        countdownEl.textContent = remainingMs > 0
+            ? `Locked -- ${formatDuration(remainingMs)} remaining`
+            : 'Locked -- expiring...';
+    } else if (status.daemonUp) {
+        countdownEl.textContent = 'Not locked.';
+    } else {
+        countdownEl.textContent = 'Daemon not running -- start it with ./bin/daemon';
+    }
+
+    const checkbox = document.getElementById('enforcement-checkbox');
+    if (document.activeElement !== checkbox) {
+        checkbox.checked = status.enforcement;
+    }
+    document.getElementById('enforcement-state').textContent = status.enforcement ? 'ON' : 'OFF';
+
+    renderAtRisk(status.atRisk || []);
+}
+
+function renderAtRisk(atRisk) {
+    const banner = document.getElementById('at-risk-banner');
+    if (atRisk.length === 0) {
+        banner.hidden = true;
+        banner.textContent = '';
+        return;
+    }
+    banner.hidden = false;
+    banner.textContent = atRisk
+        .map(r => `⚠ ${r.label} will close in ${r.graceRemainingSeconds}s unless its extension reconnects`)
+        .join(' — ');
+}
+
+function formatDuration(ms) {
+    const totalSeconds = Math.max(0, Math.round(ms / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}m ${seconds}s`;
+}
+
+document.getElementById('unlock-button').addEventListener('click', async () => {
+    const resultEl = document.getElementById('unlock-result');
+    try {
+        const status = await attemptUnlock();
+        resultEl.textContent = 'Unlocked.';
+        renderLockStatus(status);
+    } catch (err) {
+        resultEl.textContent = `Refused: ${err}`;
+    }
+});
+
+document.getElementById('enforcement-checkbox').addEventListener('change', async (e) => {
+    const enabled = e.target.checked;
+    try {
+        const status = await setEnforcement(enabled);
+        renderLockStatus(status);
+    } catch (err) {
+        alert(`Failed to change enforcement: ${err}`);
+        e.target.checked = !enabled;
+    }
 });
 
 init();

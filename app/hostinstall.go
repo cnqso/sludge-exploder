@@ -23,15 +23,6 @@ type hostManifest struct {
 	AllowedExtensions []string `json:"allowed_extensions,omitempty"`
 }
 
-func hostManifestPath(b BrowserDef) string {
-	return filepath.Join(b.NativeMessagingDir, shared.NativeHostName+".json")
-}
-
-func hostRegistered(b BrowserDef) bool {
-	_, err := os.Stat(hostManifestPath(b))
-	return err == nil
-}
-
 // nmhostPath returns the absolute path to the nmhost binary, expected next
 // to the running app binary (both are built into bin/ by the Makefile).
 // Native-messaging manifests require an absolute path, so exercising the
@@ -54,7 +45,7 @@ func nmhostPath() (string, error) {
 // (shared.ChromeExtensionID via manifest.json's "key" field, Firefox's via
 // browser_specific_settings.gecko.id), so this needs no input from the
 // user -- it's safe to call automatically for every detected browser.
-func registerBrowserHost(b BrowserDef) error {
+func registerBrowserHost(b shared.BrowserDef) error {
 	nmhost, err := nmhostPath()
 	if err != nil {
 		return fmt.Errorf("locating nmhost binary: %w", err)
@@ -85,5 +76,5 @@ func registerBrowserHost(b BrowserDef) error {
 		return err
 	}
 
-	return os.WriteFile(hostManifestPath(b), data, 0o644)
+	return os.WriteFile(shared.HostManifestPath(b), data, 0o644)
 }

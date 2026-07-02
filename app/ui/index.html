@@ -44,6 +44,20 @@
       <button id="save-button">Save preferences</button>
       <button id="lock-button">Lock</button>
       <p id="lock-summary"></p>
+      <p id="lock-countdown"></p>
+      <div id="at-risk-banner" class="at-risk-banner" hidden></div>
+      <button id="unlock-button">Attempt early unlock</button>
+      <p id="unlock-result"></p>
+      <div class="enforcement-toggle">
+        <label>
+          <input type="checkbox" id="enforcement-checkbox" />
+          Enforcement (close browsers): <span id="enforcement-state"></span>
+        </label>
+        <p class="enforcement-note">
+          Safety override, independent of the lock timer. Turning this off stops all
+          process-closing immediately, even mid-lock -- it does not stop the CSS blocking itself.
+        </p>
+      </div>
     </section>
 
     <section id="status-section">

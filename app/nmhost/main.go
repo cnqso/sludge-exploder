@@ -1,15 +1,17 @@
 // Command nmhost is the Native Messaging host Chrome/Firefox spawn per
 // connectNative() call from extension/background.js. It has no business
 // logic of its own: it's a dumb relay between Chrome's length-prefixed
-// stdio framing and the app's local Unix socket (shared.SocketPath()).
+// stdio framing and the daemon's local Unix socket
+// (shared.HeartbeatSocketPath()).
 //
 // It's a separate binary, not a flag on the app, because native-messaging
 // host manifests invoke "path" directly with fixed argv the browser
 // controls -- there's no way to pass a custom flag through that contract.
 //
-// See docs/DEVELOPMENT_PLAN.md Stage 2 and Stage 3: this relay shape is
-// deliberate so that Stage 3 can point the same binary at the daemon's
-// socket instead of the app's, without changing the framing logic here.
+// Stage 2 pointed this at the app's socket; Stage 3 moves the target to the
+// daemon so the heartbeat reaches the process that actually enforces
+// anything (docs/ENFORCEMENT.md §5.1) -- the relay/framing logic below is
+// unchanged, only the dial target moved.
 package main
 
 import (
@@ -34,7 +36,7 @@ func main() {
 	// write logs there.
 	log.SetOutput(os.Stderr)
 
-	path, err := shared.SocketPath()
+	path, err := shared.HeartbeatSocketPath()
 	if err != nil {
 		log.Printf("nmhost: resolving socket path: %v", err)
 		return
@@ -42,8 +44,8 @@ func main() {
 
 	conn, err := net.DialTimeout("unix", path, 2*time.Second)
 	if err != nil {
-		// The app isn't running (yet). Exit quietly -- background.js's own
-		// reconnect loop will spawn us again shortly.
+		// The daemon isn't running (yet). Exit quietly -- background.js's
+		// own reconnect loop will spawn us again shortly.
 		return
 	}
 	defer conn.Close()

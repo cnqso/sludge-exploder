@@ -5,30 +5,70 @@ import (
 	"log"
 	"sync"
 	"time"
+
+	"github.com/cnqso/sludge-exploder/shared"
 )
 
 // App holds the state backing the Go functions bound into the webview (see
 // main.go). All access goes through the mutex since webview_go's Bind
-// callbacks aren't documented as single-threaded.
+// callbacks aren't documented as single-threaded. Stage 3: App no longer
+// holds any bridge/heartbeat state itself -- that lives in the daemon now.
+// App is a thin client of it (daemon field, lazily resolved via
+// daemonClient() below so app/daemon launch order doesn't matter -- same
+// self-healing spirit as the extension's own reconnect loop).
 type App struct {
 	mu     sync.Mutex
 	prefs  Prefs
-	socket *SocketServer
+	daemon *DaemonClient
+
+	// focusedForRisk tracks which browsers we've already self-focused for,
+	// so handleRiskFocus brings the window forward once per new "at risk"
+	// occurrence, not on every 1s status poll while it's still ongoing.
+	focusedForRisk map[string]bool
+}
+
+// daemonClient returns a connected client, attempting to (re)create one if
+// none exists yet -- e.g. the app started before the daemon did, so the
+// control token file didn't exist at startup. Returns nil if the daemon
+// still isn't reachable.
+func (a *App) daemonClient() *DaemonClient {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.daemon != nil {
+		return a.daemon
+	}
+	client, err := NewDaemonClient()
+	if err != nil {
+		return nil
+	}
+	a.daemon = client
+	return a.daemon
 }
 
 // BrowserInfo is what the setup helper and status panel poll: filesystem
-// detection, whether we've written a host manifest, and live connection
-// state merged from the socket server.
+// detection, whether we've written a host manifest, and live heartbeat
+// state fetched from the daemon.
 type BrowserInfo struct {
 	Key            string `json:"key"`
 	Label          string `json:"label"`
 	Installed      bool   `json:"installed"`
 	HostRegistered bool   `json:"hostRegistered"`
 	Connected      bool   `json:"connected"`
+	Alive          bool   `json:"alive"`
 	ExtID          string `json:"extId,omitempty"`
 	Version        string `json:"version,omitempty"`
 	ConfigHash     string `json:"configHash,omitempty"`
 	RulesActive    int    `json:"rulesActive,omitempty"`
+}
+
+// LockStatus is what the UI polls for the countdown, the "attempt early
+// unlock" affordance, the enforcement toggle, and any at-risk warnings.
+type LockStatus struct {
+	State       string               `json:"state"` // "UNLOCKED" or "LOCKED"
+	Until       string               `json:"until,omitempty"`
+	Enforcement bool                 `json:"enforcement"`
+	DaemonUp    bool                 `json:"daemonUp"`
+	AtRisk      []shared.BrowserRisk `json:"atRisk,omitempty"`
 }
 
 // AutoRegisterHosts writes a native-messaging host manifest for every
@@ -38,8 +78,8 @@ type BrowserInfo struct {
 // onboarding should require loading the unpacked extension and nothing
 // else.
 func (a *App) AutoRegisterHosts() {
-	for _, b := range knownBrowsers() {
-		if !isInstalled(b) || hostRegistered(b) {
+	for _, b := range shared.KnownBrowsers() {
+		if !shared.IsInstalled(b) || shared.HostRegistered(b) {
 			continue
 		}
 		if err := registerBrowserHost(b); err != nil {
@@ -59,7 +99,8 @@ func (a *App) GetPrefs() (Prefs, error) {
 }
 
 // SavePrefs persists the UI's selections, rebuilds the SLUDGE_CONFIG rule
-// list, and pushes it to every connected browser's extension.
+// list, and sends it to the daemon, which pushes it to every connected
+// browser's extension.
 func (a *App) SavePrefs(p Prefs) (Prefs, error) {
 	if p.Selections == nil {
 		p.Selections = map[string]map[string]bool{}
@@ -73,7 +114,12 @@ func (a *App) SavePrefs(p Prefs) (Prefs, error) {
 	if err := savePrefsToDisk(p); err != nil {
 		return p, err
 	}
-	a.socket.PushSetConfig(rules)
+
+	if client := a.daemonClient(); client != nil {
+		if _, err := client.SetConfig(rules); err != nil {
+			log.Printf("sludge-exploder: pushing config to daemon: %v", err)
+		}
+	}
 	return p, nil
 }
 
@@ -86,26 +132,31 @@ func (a *App) GetConnectionStatus() ([]BrowserInfo, error) {
 }
 
 func (a *App) mergedBrowserInfo() []BrowserInfo {
-	byBrowser := map[string]BrowserStatus{}
-	for _, s := range a.socket.Snapshot() {
-		if s.Browser != "" {
-			byBrowser[s.Browser] = s
+	byBrowser := map[string]shared.BrowserHeartbeatStatus{}
+	if client := a.daemonClient(); client != nil {
+		if status, err := client.GetStatus(); err == nil {
+			for _, s := range status.Browsers {
+				if s.Browser != "" {
+					byBrowser[s.Browser] = s
+				}
+			}
 		}
 	}
 
 	var out []BrowserInfo
-	for _, b := range knownBrowsers() {
-		if !isInstalled(b) {
+	for _, b := range shared.KnownBrowsers() {
+		if !shared.IsInstalled(b) {
 			continue
 		}
 		info := BrowserInfo{
 			Key:            b.Key,
 			Label:          b.Label,
 			Installed:      true,
-			HostRegistered: hostRegistered(b),
+			HostRegistered: shared.HostRegistered(b),
 		}
 		if st, ok := byBrowser[b.ProcessName]; ok {
-			info.Connected = true
+			info.Connected = st.Connected
+			info.Alive = st.Alive
 			info.ExtID = st.ExtID
 			info.Version = st.Version
 			info.ConfigHash = st.ConfigHash
@@ -120,7 +171,7 @@ func (a *App) mergedBrowserInfo() []BrowserInfo {
 // auto-registration failed (e.g. a permissions error writing to the
 // browser's NativeMessagingHosts directory).
 func (a *App) RegisterBrowserHost(browserKey string) (BrowserInfo, error) {
-	b, ok := findBrowser(browserKey)
+	b, ok := shared.FindBrowser(browserKey)
 	if !ok {
 		return BrowserInfo{}, fmt.Errorf("unknown browser %q", browserKey)
 	}
@@ -135,8 +186,57 @@ func (a *App) RegisterBrowserHost(browserKey string) (BrowserInfo, error) {
 	return BrowserInfo{}, nil
 }
 
-// ConfirmLock is Stage 2's fake Lock: it records intent and shows a summary
-// but enforces nothing (the daemon that makes this real lands in Stage 3).
+// GetLockStatus is polled by the UI for the countdown and enforcement
+// toggle. DaemonUp is false (rather than an error) when the daemon isn't
+// reachable, so the UI can show "daemon not running" instead of a raw
+// connection error.
+func (a *App) GetLockStatus() (LockStatus, error) {
+	client := a.daemonClient()
+	if client == nil {
+		return LockStatus{State: shared.LockStateUnlocked}, nil
+	}
+	status, err := client.GetStatus()
+	if err != nil {
+		return LockStatus{State: shared.LockStateUnlocked}, nil
+	}
+
+	a.handleRiskFocus(status.Risk)
+
+	return LockStatus{
+		State:       status.LockState,
+		Until:       status.Until,
+		Enforcement: status.Enforcement,
+		DaemonUp:    true,
+		AtRisk:      status.Risk,
+	}, nil
+}
+
+// handleRiskFocus brings the app window to the front the moment a browser
+// newly enters the "at risk" state (grace period counting down), not on
+// every 1s poll for as long as it stays that way -- one focus-steal per
+// incident, not a stream of them.
+func (a *App) handleRiskFocus(risk []shared.BrowserRisk) {
+	a.mu.Lock()
+	newlyAtRisk := false
+	current := make(map[string]bool, len(risk))
+	for _, r := range risk {
+		current[r.Browser] = true
+		if !a.focusedForRisk[r.Browser] {
+			newlyAtRisk = true
+		}
+	}
+	a.focusedForRisk = current
+	a.mu.Unlock()
+
+	if newlyAtRisk {
+		focusSelf()
+	}
+}
+
+// ConfirmLock starts a real, daemon-enforced lock (Stage 3 -- Stage 2's
+// version only recorded intent). Also persists the confirmed duration/
+// summary locally so the UI has something to show even if the daemon is
+// briefly unreachable.
 func (a *App) ConfirmLock(durationMinutes int) (LockIntent, error) {
 	a.mu.Lock()
 	blockedApps := 0
@@ -156,6 +256,14 @@ func (a *App) ConfirmLock(durationMinutes int) (LockIntent, error) {
 		ConfirmedAt:     time.Now().Format(time.RFC3339),
 	}
 
+	client := a.daemonClient()
+	if client == nil {
+		return intent, fmt.Errorf("daemon is not running -- start it with `./bin/daemon` first")
+	}
+	if _, err := client.StartLock(time.Duration(durationMinutes) * time.Minute); err != nil {
+		return intent, err
+	}
+
 	a.mu.Lock()
 	a.prefs.DurationMinutes = durationMinutes
 	a.prefs.LastLockIntent = &intent
@@ -166,4 +274,33 @@ func (a *App) ConfirmLock(durationMinutes int) (LockIntent, error) {
 		return intent, err
 	}
 	return intent, nil
+}
+
+// AttemptUnlock always tries StopLock and returns whatever the daemon says
+// -- while LOCKED, that's an explicit refusal, shown as-is in the UI so the
+// mechanism is visibly real rather than just a disabled button.
+func (a *App) AttemptUnlock() (LockStatus, error) {
+	client := a.daemonClient()
+	if client == nil {
+		return LockStatus{State: shared.LockStateUnlocked}, fmt.Errorf("daemon is not running")
+	}
+	resp, err := client.StopLock()
+	if err != nil {
+		return LockStatus{}, err
+	}
+	return LockStatus{State: resp.LockState, Until: resp.Until, Enforcement: resp.Enforcement, DaemonUp: true}, nil
+}
+
+// SetEnforcement is the safety override described in the Stage 3 plan:
+// works regardless of lock state, always available in the UI.
+func (a *App) SetEnforcement(enabled bool) (LockStatus, error) {
+	client := a.daemonClient()
+	if client == nil {
+		return LockStatus{State: shared.LockStateUnlocked}, fmt.Errorf("daemon is not running")
+	}
+	resp, err := client.SetEnforcement(enabled)
+	if err != nil {
+		return LockStatus{}, err
+	}
+	return LockStatus{State: resp.LockState, Until: resp.Until, Enforcement: resp.Enforcement, DaemonUp: true}, nil
 }
