@@ -21,6 +21,7 @@ section {
 .part-toggle { display: block; margin: 4px 0 4px 12px; }
 .custom-domain { margin-top: 16px; }
 .custom-domain input { margin-right: 8px; padding: 4px 8px; }
+.startup-toggle { margin-top: 16px; }
 .browser-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
 .browser-row input { padding: 4px 8px; flex: 1; max-width: 320px; }
 .browser-status { font-weight: bold; width: 1.2em; text-align: center; }

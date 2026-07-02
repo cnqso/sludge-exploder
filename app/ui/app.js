@@ -18,6 +18,33 @@ async function init() {
 
     await refreshLockStatus();
     setInterval(refreshLockStatus, 1000);
+
+    await initStartupToggle();
+}
+
+async function initStartupToggle() {
+    const checkbox = document.getElementById('startup-checkbox');
+    const note = document.getElementById('startup-note');
+    // isStartOnLoginEnabled() never errors -- it just reports false on
+    // platforms without an implementation (see app/startup_other.go).
+    // Attempting to actually toggle it is what surfaces "not implemented"
+    // on those platforms, handled in the change listener below.
+    checkbox.checked = await isStartOnLoginEnabled();
+
+    checkbox.addEventListener('change', async (e) => {
+        const wantEnabled = e.target.checked;
+        try {
+            if (wantEnabled) {
+                await enableStartOnLogin();
+            } else {
+                await disableStartOnLogin();
+            }
+            note.textContent = '';
+        } catch (err) {
+            note.textContent = `Failed: ${err}`;
+            e.target.checked = !wantEnabled;
+        }
+    });
 }
 
 function renderCatalog() {

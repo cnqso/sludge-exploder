@@ -6,7 +6,9 @@ import (
 )
 
 // appDir returns (creating if needed) the per-user directory all of the
-// app/daemon/nmhost's local state lives under.
+// app/daemon/nmhost's local state lives under. os.UserConfigDir() already
+// resolves correctly per-OS (~/Library/Application Support on macOS,
+// %AppData% on Windows), so this stays OS-agnostic.
 func appDir() (string, error) {
 	dir, err := os.UserConfigDir()
 	if err != nil {
@@ -19,30 +21,15 @@ func appDir() (string, error) {
 	return path, nil
 }
 
-// HeartbeatSocketPath is the daemon's Unix socket that nmhost relays the
-// extension's Native Messaging traffic to (extension <-> daemon).
-// Cross-platform named-pipe swap is deferred to Stage 5 Windows parity.
-func HeartbeatSocketPath() (string, error) {
-	dir, err := appDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "heartbeat.sock"), nil
-}
-
-// ControlSocketPath is the daemon's Unix socket that the app dials directly
-// (app <-> daemon) to send authenticated control commands.
-func ControlSocketPath() (string, error) {
-	dir, err := appDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "control.sock"), nil
-}
+// HeartbeatSocketPath and ControlSocketPath are declared here but
+// implemented per-OS (paths_darwin.go: filesystem socket paths under
+// appDir(); paths_windows.go: named-pipe names, which aren't filesystem
+// objects and don't live under appDir() at all) -- see shared/ipc.go for
+// the matching Listen/Dial seam.
 
 // ControlTokenPath is where the daemon persists the random token used to
-// authenticate control-socket connections. 0600, readable only by the local
-// user both the app and daemon run as.
+// authenticate control-channel connections. 0600, readable only by the
+// local user both the app and daemon run as.
 func ControlTokenPath() (string, error) {
 	dir, err := appDir()
 	if err != nil {

@@ -36,6 +36,7 @@ func main() {
 	defer w.Destroy()
 	w.SetTitle("Sludge Exploder")
 	w.SetSize(900, 720, webview.HintNone)
+	app.windowHandle = w.Window() // for focusSelf (focus_darwin.go/focus_windows.go)
 
 	bind := func(name string, f interface{}) {
 		if err := w.Bind(name, f); err != nil {
@@ -52,6 +53,9 @@ func main() {
 	bind("confirmLock", app.ConfirmLock)
 	bind("attemptUnlock", app.AttemptUnlock)
 	bind("setEnforcement", app.SetEnforcement)
+	bind("enableStartOnLogin", app.EnableStartOnLogin)
+	bind("disableStartOnLogin", app.DisableStartOnLogin)
+	bind("isStartOnLoginEnabled", app.IsStartOnLoginEnabled)
 
 	html := strings.Replace(uiHTML, "/*STYLE*/", uiCSS, 1)
 	html = strings.Replace(html, "/*SCRIPT*/", uiJS, 1)

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"net"
 	"os"
 	"time"
 
@@ -41,7 +40,7 @@ func (c *DaemonClient) send(msg shared.Message) (shared.Message, error) {
 		return shared.Message{}, err
 	}
 
-	conn, err := net.DialTimeout("unix", path, 2*time.Second)
+	conn, err := shared.DialIPC(path, 2*time.Second)
 	if err != nil {
 		return shared.Message{}, fmt.Errorf("connecting to daemon (is it running?): %w", err)
 	}

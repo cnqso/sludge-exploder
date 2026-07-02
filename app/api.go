@@ -5,6 +5,7 @@ import (
 	"log"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/cnqso/sludge-exploder/shared"
 )
@@ -20,6 +21,12 @@ type App struct {
 	mu     sync.Mutex
 	prefs  Prefs
 	daemon *DaemonClient
+
+	// windowHandle is the native window handle (NSWindow* on macOS, HWND on
+	// Windows) from webview_go's Window(), captured once in main.go right
+	// after the window is created. focusSelf (focus_darwin.go/
+	// focus_windows.go) uses it to bring the window to the front.
+	windowHandle unsafe.Pointer
 
 	// focusedForRisk tracks which browsers we've already self-focused for,
 	// so handleRiskFocus brings the window forward once per new "at risk"
@@ -229,7 +236,7 @@ func (a *App) handleRiskFocus(risk []shared.BrowserRisk) {
 	a.mu.Unlock()
 
 	if newlyAtRisk {
-		focusSelf()
+		focusSelf(a.windowHandle)
 	}
 }
 

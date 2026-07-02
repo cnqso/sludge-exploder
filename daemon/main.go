@@ -16,12 +16,15 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/cnqso/sludge-exploder/shared"
 )
 
 func main() {
 	enforceFlag := flag.Bool("enforce", false, "actually close browsers instead of only logging what would happen")
 	uncontrolledFlag := flag.String("uncontrolled", "", `comma-separated process names to close whenever running during a lock (explicit opt-in test target only, e.g. --uncontrolled="Google Chrome" -- never defaulted to a real browser)`)
 	gracePeriodFlag := flag.Duration("grace-period", 90*time.Second, "startup grace period per browser session, from when it launches -- missing/uncontrolled before this elapses is never closed; after it elapses, closed on the very first missed heartbeat (Cold Turkey-style: grace on launch, none for an established session)")
+	writeForcelistFlag := flag.Bool("write-forcelist-policy", false, "write the ExtensionInstallForcelist registry policy for known Chrome-family browsers (Windows only). Explicit opt-in like --enforce: writes policy-shaped registry state, and per docs/ENFORCEMENT.md has no observable effect until the extension is published (Stage 5) -- see forcelist_windows.go")
 	flag.Parse()
 
 	var uncontrolled []string
@@ -65,6 +68,18 @@ func main() {
 	}
 	if state, until := lock.State(); state == "LOCKED" {
 		log.Printf("sludge-exploder daemon: resuming a lock persisted from a previous run, until %s", until.Format(time.RFC3339))
+	}
+
+	if *writeForcelistFlag {
+		log.Printf("sludge-exploder daemon: writing force-install policy (NOTE: has no observable effect until the extension is published -- see --help)")
+		for _, b := range shared.KnownBrowsers() {
+			if b.WindowsForcelistKey == "" {
+				continue
+			}
+			if err := writeForceInstallPolicy(b, shared.ChromeExtensionID); err != nil {
+				log.Printf("sludge-exploder daemon: writing forcelist policy for %s: %v", b.Label, err)
+			}
+		}
 	}
 
 	// Block until interrupted. Matches Stage 3 scope: no re-spawn-on-kill,

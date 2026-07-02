@@ -1,8 +1,9 @@
 // Command nmhost is the Native Messaging host Chrome/Firefox spawn per
 // connectNative() call from extension/background.js. It has no business
 // logic of its own: it's a dumb relay between Chrome's length-prefixed
-// stdio framing and the daemon's local Unix socket
-// (shared.HeartbeatSocketPath()).
+// stdio framing and the daemon's local IPC channel
+// (shared.HeartbeatSocketPath() -- a Unix socket on macOS, a named pipe on
+// Windows; see shared/ipc.go).
 //
 // It's a separate binary, not a flag on the app, because native-messaging
 // host manifests invoke "path" directly with fixed argv the browser
@@ -42,7 +43,7 @@ func main() {
 		return
 	}
 
-	conn, err := net.DialTimeout("unix", path, 2*time.Second)
+	conn, err := shared.DialIPC(path, 2*time.Second)
 	if err != nil {
 		// The daemon isn't running (yet). Exit quietly -- background.js's
 		// own reconnect loop will spawn us again shortly.
@@ -99,13 +100,20 @@ func relayStdinToSocket(conn net.Conn) {
 }
 
 // detectBrowser identifies which browser spawned this process by looking up
-// its parent process's command name. Best-effort, macOS only for now --
-// mirrors the project's existing pattern of stubbing non-darwin backends
-// until they're needed (see /daemon).
+// its parent process's command name. Best-effort; the returned name must
+// match a BrowserDef.ProcessName in shared.KnownBrowsers() for that OS.
 func detectBrowser() string {
-	if runtime.GOOS != "darwin" {
+	switch runtime.GOOS {
+	case "darwin":
+		return detectBrowserDarwin()
+	case "windows":
+		return detectBrowserWindows()
+	default:
 		return ""
 	}
+}
+
+func detectBrowserDarwin() string {
 	out, err := exec.Command("ps", "-o", "comm=", "-p", fmt.Sprint(os.Getppid())).Output()
 	if err != nil {
 		return ""
@@ -115,4 +123,18 @@ func detectBrowser() string {
 		return ""
 	}
 	return filepath.Base(comm)
+}
+
+func detectBrowserWindows() string {
+	out, err := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", os.Getppid()), "/NH", "/FO", "CSV").Output()
+	if err != nil {
+		return ""
+	}
+	line := strings.TrimSpace(string(out))
+	fields := strings.Split(line, ",")
+	if len(fields) == 0 {
+		return ""
+	}
+	// tasklist's CSV output quotes each field, e.g. "chrome.exe","1234",...
+	return strings.Trim(fields[0], `"`)
 }

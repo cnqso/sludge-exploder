@@ -1,9 +1,17 @@
 .PHONY: build run-app run-daemon clean dev dev-stop dev-reset dev-status dev-logs
 
+# go build -o bin/app (no extension) does NOT get .exe auto-appended on
+# Windows -- it produces a literal extensionless file, which silently
+# breaks nmhostPath()/daemonPath() (app/hostinstall.go, app/startup_windows.go),
+# both of which look for "nmhost.exe"/"daemon.exe" specifically. `go env
+# GOEXE` is the portable way to get the right suffix (".exe" on Windows,
+# "" everywhere else) for whichever platform this is actually running on.
+GOEXE := $(shell go env GOEXE)
+
 build:
-	go build -o bin/app ./app
-	go build -o bin/nmhost ./app/nmhost
-	go build -o bin/daemon ./daemon
+	go build -o bin/app$(GOEXE) ./app
+	go build -o bin/nmhost$(GOEXE) ./app/nmhost
+	go build -o bin/daemon$(GOEXE) ./daemon
 
 run-app:
 	go run ./app

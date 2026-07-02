@@ -71,8 +71,8 @@ func (s *HeartbeatServer) Start() error {
 	if err != nil {
 		return err
 	}
-	os.Remove(path) // stale socket from a previous run
-	ln, err := net.Listen("unix", path)
+	os.Remove(path) // stale socket from a previous run (no-op on Windows named pipes)
+	ln, err := shared.ListenIPC(path)
 	if err != nil {
 		return err
 	}

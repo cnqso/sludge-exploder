@@ -35,12 +35,12 @@ func (s *ControlServer) Start() error {
 	if err != nil {
 		return err
 	}
-	os.Remove(path) // stale socket from a previous run
-	ln, err := net.Listen("unix", path)
+	os.Remove(path) // stale socket from a previous run (no-op on Windows named pipes)
+	ln, err := shared.ListenIPC(path)
 	if err != nil {
 		return err
 	}
-	os.Chmod(path, 0o600) // defense in depth alongside the token
+	os.Chmod(path, 0o600) // defense in depth alongside the token (no-op on Windows; named pipes get their own ACL via go-winio's default security descriptor)
 	s.listener = ln
 	go s.acceptLoop()
 	return nil
