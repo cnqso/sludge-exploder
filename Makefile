@@ -2,6 +2,7 @@
 
 build:
 	go build -o bin/app ./app
+	go build -o bin/nmhost ./app/nmhost
 	go build -o bin/daemon ./daemon
 
 run-app:

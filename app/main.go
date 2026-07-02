@@ -1,19 +1,63 @@
 // Command app is the Sludge Exploder preference UI: a Go process hosting a
-// system webview. Stage 0 just proves the window opens; the real preference
-// flow (Stage 2) fills it in.
+// system webview, plus a local socket server that the Native Messaging
+// relay (app/nmhost) connects to so it can push config into the extension.
+// See the Stage 2 plan in docs/DEVELOPMENT_PLAN.md.
 package main
 
 import (
-	"github.com/webview/webview_go"
+	_ "embed"
+	"log"
+	"strings"
 
-	_ "github.com/cnqso/sludge-exploder/shared"
+	"github.com/webview/webview_go"
 )
 
+//go:embed ui/index.html
+var uiHTML string
+
+//go:embed ui/app.js
+var uiJS string
+
+//go:embed ui/style.css
+var uiCSS string
+
 func main() {
+	prefs, err := loadPrefs()
+	if err != nil {
+		log.Printf("sludge-exploder: loading prefs, starting fresh: %v", err)
+		prefs = defaultPrefs()
+	}
+
+	socket := NewSocketServer()
+	if err := socket.Start(); err != nil {
+		log.Fatalf("sludge-exploder: starting local socket server: %v", err)
+	}
+	defer socket.Stop()
+
+	app := &App{prefs: prefs, socket: socket}
+	app.AutoRegisterHosts()
+
 	w := webview.New(false)
 	defer w.Destroy()
 	w.SetTitle("Sludge Exploder")
-	w.SetSize(800, 600, webview.HintNone)
-	w.SetHtml("<html><body style='font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0;'><h1>Sludge Exploder</h1></body></html>")
+	w.SetSize(900, 720, webview.HintNone)
+
+	bind := func(name string, f interface{}) {
+		if err := w.Bind(name, f); err != nil {
+			log.Fatalf("sludge-exploder: binding %s: %v", name, err)
+		}
+	}
+	bind("getCatalog", app.GetCatalog)
+	bind("getPrefs", app.GetPrefs)
+	bind("savePrefs", app.SavePrefs)
+	bind("getDetectedBrowsers", app.GetDetectedBrowsers)
+	bind("getConnectionStatus", app.GetConnectionStatus)
+	bind("registerBrowserHost", app.RegisterBrowserHost)
+	bind("confirmLock", app.ConfirmLock)
+
+	html := strings.Replace(uiHTML, "/*STYLE*/", uiCSS, 1)
+	html = strings.Replace(html, "/*SCRIPT*/", uiJS, 1)
+	w.SetHtml(html)
+
 	w.Run()
 }

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Sludge Exploder</title>
+<style>/*STYLE*/</style>
+</head>
+<body>
+  <header>
+    <h1>Sludge Exploder</h1>
+    <p class="tagline">The internet is good. Recommendation algorithms are bad.</p>
+  </header>
+
+  <main>
+    <section id="apps-section">
+      <h2>1. Which apps</h2>
+      <div id="catalog"></div>
+      <div class="custom-domain">
+        <h3>Custom domain</h3>
+        <input id="custom-domain-input" placeholder="example.com" />
+        <input id="custom-selectors-input" placeholder="CSS selectors, comma separated (e.g. body)" />
+        <button id="add-custom-domain">Add</button>
+        <ul id="custom-domain-list"></ul>
+      </div>
+    </section>
+
+    <section id="duration-section">
+      <h2>2. How long</h2>
+      <label>Lock duration (minutes): <input id="duration-input" type="number" min="1" value="60" /></label>
+    </section>
+
+    <section id="setup-section">
+      <h2>3. Setup helper</h2>
+      <p>
+        Only one manual step: <code>chrome://extensions</code> (or your browser's equivalent) &rarr;
+        enable Developer Mode &rarr; "Load unpacked" &rarr; select this repo's <code>extension/</code>
+        folder. Nothing else to configure -- each detected browser below is registered automatically.
+      </p>
+      <div id="browser-list"></div>
+    </section>
+
+    <section id="lock-section">
+      <h2>4. Lock</h2>
+      <button id="save-button">Save preferences</button>
+      <button id="lock-button">Lock</button>
+      <p id="lock-summary"></p>
+    </section>
+
+    <section id="status-section">
+      <h2>Status</h2>
+      <pre id="status-panel"></pre>
+    </section>
+  </main>
+
+  <dialog id="lock-confirm-dialog">
+    <p id="lock-confirm-text"></p>
+    <button id="lock-confirm-yes">Confirm</button>
+    <button id="lock-confirm-no">Cancel</button>
+  </dialog>
+
+<script>/*SCRIPT*/</script>
+</body>
+</html>

@@ -3,6 +3,7 @@
     "name": "Sludge Exploder",
     "version": "1.0",
     "description": "Brute, barbaric, unsophisticated website blocker.",
+    "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAz42ltWd/BT9mU/5lg8tcZ20ctoLi+IzKZI9F4/+B2xXV6Yy3063kKivT7AF2EE+spzkmpVeGXWRtgR2wlgP9lfj/sT7dRbm39SPdiu+F5m77EW2Ik+FjNhHuyvAzKy4xNCcvWBJi5wJM6huBJS3NJwGJunlQQYLqc1DIQani5/XqPIW8/MV1pHJ9vTxq25DK+zdAV/OPeXyA/v1FHL8R1LRqECKnAhQMiF584qP1j3/Ein9L/Q0w66fL0193K4o/dy+0HhCqyfSs+C9Dx3EFkpBDMmWn9uQi59fm/ZHLBDQgmmBNsKmLU/d4fIVY64JnFyKj1KcOu7vp+2b9sDdkHQIDAQAB",
     "icons": {
         "16": "icon16.png",
         "48": "icon48.png",
@@ -14,14 +15,14 @@
             "strict_min_version": "115.0"
         }
     },
-    "permissions": ["storage"],
+    "permissions": ["storage", "nativeMessaging"],
     "background": {
         "service_worker": "background.js"
     },
     "content_scripts": [
       {
         "matches": ["<all_urls>"],
-        "js": ["config.js", "zapper.js"],
+        "js": ["config.js", "hash.js", "zapper.js"],
         "run_at": "document_start"
       }
     ]

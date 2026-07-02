@@ -78,18 +78,6 @@
         return currentHour >= start || currentHour < end;
     };
 
-    // FNV-1a: fast, deterministic, good enough for change-detection (not
-    // security). Used for the configHash reported by getStatus.
-    const hashConfig = (config) => {
-        const str = JSON.stringify(config);
-        let hash = 0x811c9dc5;
-        for (let i = 0; i < str.length; i++) {
-            hash ^= str.charCodeAt(i);
-            hash = Math.imul(hash, 0x01000193);
-        }
-        return (hash >>> 0).toString(16);
-    };
-
     // Storage first, bundled config.js as the first-run fallback. A
     // chrome.storage.local read can fail if the extension context has been
     // invalidated (e.g. mid-reload) or storage isn't available, in which
@@ -108,14 +96,16 @@
     }
 
     (async function main() {
-        const CONFIG = await loadConfig();
+        const currentHost = window.location.hostname.toLowerCase();
 
+        let CONFIG = await loadConfig();
         if (!Array.isArray(CONFIG)) {
             console.error('SLUDGE EXPLODER: SLUDGE_CONFIG not found.');
             return;
         }
 
-        const configHash = hashConfig(CONFIG);
+        let configHash = sludgeHashConfig(CONFIG);
+        let siteConfig = selectMostSpecificDomain(currentHost, CONFIG);
 
         chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             if (message?.type === 'getStatus') {
@@ -128,12 +118,14 @@
             }
         });
 
-        const currentHost = window.location.hostname.toLowerCase();
-        const siteConfig = selectMostSpecificDomain(currentHost, CONFIG);
-
-        if (!siteConfig) return;
-
         function applyBlocking() {
+            let style = document.getElementById('zapper-block-style');
+
+            if (!siteConfig) {
+                if (style) style.remove();
+                return;
+            }
+
             const currentPath = window.location.pathname;
             const currentHour = new Date().getHours();
 
@@ -165,7 +157,6 @@
 
             const cssRules = (permablockRules + ' ' + regularRules).trim();
 
-            let style = document.getElementById('zapper-block-style');
             if (cssRules) {
                 if (!style) {
                     style = document.createElement('style');
@@ -198,6 +189,18 @@
                 applyBlocking();
             }
         }, 200);
+
+        // Live updates: when the app pushes a new SetConfig, background.js
+        // writes it to storage, and every open tab picks it up here without
+        // a reload.
+        chrome.storage.onChanged.addListener((changes, area) => {
+            if (area !== 'local' || !changes[STORAGE_KEY]) return;
+            const newConfig = changes[STORAGE_KEY].newValue;
+            CONFIG = Array.isArray(newConfig) && newConfig.length > 0 ? newConfig : BUNDLED_CONFIG;
+            configHash = sludgeHashConfig(CONFIG);
+            siteConfig = selectMostSpecificDomain(currentHost, CONFIG);
+            applyBlocking();
+        });
     })();
 
 })();
