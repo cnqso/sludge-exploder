@@ -1,13 +1,11 @@
 (function () {
-    const CONFIG = globalThis.SLUDGE_CONFIG;
+    const BUNDLED_CONFIG = globalThis.SLUDGE_CONFIG;
+    const STORAGE_KEY = 'SLUDGE_CONFIG';
 
-    if (!Array.isArray(CONFIG)) {
-        console.error('SLUDGE EXPLODER: SLUDGE_CONFIG not found.');
-        return;
-    }
-
-    // Patch the history API immediately. This catches same-world navigation
-    // calls; the URL poller below covers frameworks that bypass the patch.
+    // Patch the history API immediately, before config even loads. This
+    // catches same-world navigation calls; the URL poller below covers
+    // frameworks that bypass the patch. Doing this synchronously means we
+    // don't miss an early SPA navigation while config loads asynchronously.
     let onNavigate = () => {};
 
     const _push = history.pushState.bind(history);
@@ -80,75 +78,126 @@
         return currentHour >= start || currentHour < end;
     };
 
-    const currentHost = window.location.hostname.toLowerCase();
-    const siteConfig = selectMostSpecificDomain(currentHost, CONFIG);
-
-    if (!siteConfig) return;
-
-    function applyBlocking() {
-        const currentPath = window.location.pathname;
-        const currentHour = new Date().getHours();
-
-        let activeConfig = siteConfig;
-        const pathMatch = selectMostSpecificPath(siteConfig.paths, currentPath);
-
-        if (pathMatch) {
-            activeConfig = {
-                ...siteConfig,
-                ...pathMatch,
-                permablock_selectors: [
-                    ...(siteConfig.permablock_selectors || []),
-                    ...(pathMatch.permablock_selectors || [])
-                ]
-            };
+    // FNV-1a: fast, deterministic, good enough for change-detection (not
+    // security). Used for the configHash reported by getStatus.
+    const hashConfig = (config) => {
+        const str = JSON.stringify(config);
+        let hash = 0x811c9dc5;
+        for (let i = 0; i < str.length; i++) {
+            hash ^= str.charCodeAt(i);
+            hash = Math.imul(hash, 0x01000193);
         }
+        return (hash >>> 0).toString(16);
+    };
 
-        const isAllowed = isWithinAllowWindow(activeConfig.allowWindow, currentHour);
-
-        const permablockRules = (activeConfig.permablock_selectors || [])
-            .map(s => `${s} { display: none !important; visibility: hidden !important; opacity: 0 !important; }`)
-            .join(' ');
-
-        const regularRules = (!isAllowed && activeConfig.selectors)
-            ? activeConfig.selectors
-                .map(s => `${s} { display: none !important; visibility: hidden !important; opacity: 0 !important; }`)
-                .join(' ')
-            : '';
-
-        const cssRules = (permablockRules + ' ' + regularRules).trim();
-
-        let style = document.getElementById('zapper-block-style');
-        if (cssRules) {
-            if (!style) {
-                style = document.createElement('style');
-                style.id = 'zapper-block-style';
-                (document.head || document.documentElement).appendChild(style);
+    // Storage first, bundled config.js as the first-run fallback. A
+    // chrome.storage.local read can fail if the extension context has been
+    // invalidated (e.g. mid-reload) or storage isn't available, in which
+    // case we fall back the same as if storage were simply empty.
+    async function loadConfig() {
+        try {
+            const stored = await chrome.storage.local.get(STORAGE_KEY);
+            const storedConfig = stored[STORAGE_KEY];
+            if (Array.isArray(storedConfig) && storedConfig.length > 0) {
+                return storedConfig;
             }
-            style.textContent = cssRules;
-            const target = activeConfig !== siteConfig
-                ? `${siteConfig.domain}${currentPath}`
-                : siteConfig.domain;
-            console.log(`SLUDGE EXPLODER: Blocking content on ${target}`);
-        } else if (style) {
-            style.remove();
+        } catch (err) {
+            console.warn('SLUDGE EXPLODER: storage read failed, using bundled config.', err);
         }
+        return BUNDLED_CONFIG;
     }
 
-    // Belt-and-suspenders URL poller: catches SPA navigations that bypass
-    // pushState/replaceState patches or only change query/hash state.
-    let lastUrlKey = getUrlKey();
-    onNavigate = () => {
-        lastUrlKey = getUrlKey();
-        applyBlocking();
-    };
-    applyBlocking();
+    (async function main() {
+        const CONFIG = await loadConfig();
 
-    setInterval(() => {
-        const urlKey = getUrlKey();
-        if (urlKey !== lastUrlKey) {
-            lastUrlKey = urlKey;
-            applyBlocking();
+        if (!Array.isArray(CONFIG)) {
+            console.error('SLUDGE EXPLODER: SLUDGE_CONFIG not found.');
+            return;
         }
-    }, 200);
+
+        const configHash = hashConfig(CONFIG);
+
+        chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+            if (message?.type === 'getStatus') {
+                sendResponse({
+                    extId: chrome.runtime.id,
+                    version: chrome.runtime.getManifest().version,
+                    configHash,
+                    rulesActive: CONFIG.length,
+                });
+            }
+        });
+
+        const currentHost = window.location.hostname.toLowerCase();
+        const siteConfig = selectMostSpecificDomain(currentHost, CONFIG);
+
+        if (!siteConfig) return;
+
+        function applyBlocking() {
+            const currentPath = window.location.pathname;
+            const currentHour = new Date().getHours();
+
+            let activeConfig = siteConfig;
+            const pathMatch = selectMostSpecificPath(siteConfig.paths, currentPath);
+
+            if (pathMatch) {
+                activeConfig = {
+                    ...siteConfig,
+                    ...pathMatch,
+                    permablock_selectors: [
+                        ...(siteConfig.permablock_selectors || []),
+                        ...(pathMatch.permablock_selectors || [])
+                    ]
+                };
+            }
+
+            const isAllowed = isWithinAllowWindow(activeConfig.allowWindow, currentHour);
+
+            const permablockRules = (activeConfig.permablock_selectors || [])
+                .map(s => `${s} { display: none !important; visibility: hidden !important; opacity: 0 !important; }`)
+                .join(' ');
+
+            const regularRules = (!isAllowed && activeConfig.selectors)
+                ? activeConfig.selectors
+                    .map(s => `${s} { display: none !important; visibility: hidden !important; opacity: 0 !important; }`)
+                    .join(' ')
+                : '';
+
+            const cssRules = (permablockRules + ' ' + regularRules).trim();
+
+            let style = document.getElementById('zapper-block-style');
+            if (cssRules) {
+                if (!style) {
+                    style = document.createElement('style');
+                    style.id = 'zapper-block-style';
+                    (document.head || document.documentElement).appendChild(style);
+                }
+                style.textContent = cssRules;
+                const target = activeConfig !== siteConfig
+                    ? `${siteConfig.domain}${currentPath}`
+                    : siteConfig.domain;
+                console.log(`SLUDGE EXPLODER: Blocking content on ${target}`);
+            } else if (style) {
+                style.remove();
+            }
+        }
+
+        // Belt-and-suspenders URL poller: catches SPA navigations that bypass
+        // pushState/replaceState patches or only change query/hash state.
+        let lastUrlKey = getUrlKey();
+        onNavigate = () => {
+            lastUrlKey = getUrlKey();
+            applyBlocking();
+        };
+        applyBlocking();
+
+        setInterval(() => {
+            const urlKey = getUrlKey();
+            if (urlKey !== lastUrlKey) {
+                lastUrlKey = urlKey;
+                applyBlocking();
+            }
+        }, 200);
+    })();
 
 })();

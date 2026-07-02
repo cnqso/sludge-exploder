@@ -14,6 +14,10 @@
             "strict_min_version": "115.0"
         }
     },
+    "permissions": ["storage"],
+    "background": {
+        "service_worker": "background.js"
+    },
     "content_scripts": [
       {
         "matches": ["<all_urls>"],
